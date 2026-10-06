@@ -1293,5 +1293,120 @@ else window.addEventListener('load',function(){setTimeout(init,0)});
   window.addEventListener('load',function(){setTimeout(boot,400);});
 })();
 </script>
+<script id="v2-fit">
+(function(){
+  function fit(){
+    var g=document.querySelector('.grid');if(!g)return;
+    var l=g.querySelector(':scope>.left'),r=g.children[1];
+    var top=g.getBoundingClientRect().top+window.scrollY;
+    var h=Math.max(200,window.innerHeight-top);
+    g.style.height=h+'px';g.style.overflow='hidden';
+    if(l){l.style.height=h+'px';l.style.overflowY='auto';l.style.paddingBottom='60px';}
+    if(r){r.style.height=h+'px';r.style.overflowY='auto';}
+  }
+  window.fitGrid=fit;
+  window.addEventListener('resize',fit);window.addEventListener('load',function(){fit();setTimeout(fit,500);setTimeout(fit,1500);});
+  setInterval(fit,1000);
+})();
+</script>
+<script id="v2-persist">
+(function(){
+  var K='v2_ui';
+  function get(){try{return JSON.parse(localStorage.getItem(K)||'{}')}catch(e){return {}}}
+  function put(o){try{localStorage.setItem(K,JSON.stringify(o))}catch(e){}}
+  function set(k,v){var o=get();o[k]=v;put(o);}
+  function $(i){return document.getElementById(i)}
+  function applyPanel(v){var el=$('panelSlider');if(!el)return;el.value=v;document.documentElement.style.setProperty('--panel-w',el.value+'px');$('panelBadge').textContent=el.value+'px';if(window.fitGrid)try{fitGrid()}catch(e){}}
+  function applyZoom(v){var el=$('previewSlider');if(!el)return;el.value=v;$('previewBadge').textContent=el.value+'%';var f=$('previewFrame');if(f)f.style.zoom=el.value+'%';}
+  function wire(){
+    var p=$('panelSlider'),z=$('previewSlider');
+    if(p)p.addEventListener('input',function(){set('panel',p.value)});
+    if(z)z.addEventListener('input',function(){set('zoom',z.value)});
+    var en=$('exportNameInput');if(en)en.addEventListener('input',function(){set('exportName',en.value)});
+    // minden további csúszka / select / szám mező automatikusan
+    document.querySelectorAll('input[type=range],select').forEach(function(el){
+      if(!el.id||el.id==='panelSlider'||el.id==='previewSlider'||el.id==='fontSelect')return;
+      el.addEventListener('input',function(){set('el_'+el.id,el.value)});el.addEventListener('change',function(){set('el_'+el.id,el.value)});
+    });
+    // színszűrő és kiválasztott projekt figyelése
+    var lastF,lastC;setInterval(function(){
+      try{
+        if(typeof colorFilter!=='undefined'&&colorFilter!==lastF){lastF=colorFilter;set('colorFilter',colorFilter||'');}
+        if(typeof curIndex!=='undefined'&&curIndex!==lastC){lastC=curIndex;if(curIndex>=0)set('cur',curIndex);}
+      }catch(e){}
+    },400);
+  }
+  function restore(){
+    var o=get();
+    if(o.panel)applyPanel(o.panel);
+    if(o.zoom)applyZoom(o.zoom);
+    var en=$('exportNameInput');if(en&&o.exportName)en.value=o.exportName;
+    Object.keys(o).forEach(function(k){if(k.indexOf('el_')===0){var el=$(k.slice(3));if(el&&el.value!==o[k]){el.value=o[k];try{el.dispatchEvent(new Event('input'));el.dispatchEvent(new Event('change'));}catch(e){}}}});
+    var tries=0,t=setInterval(function(){
+      tries++;
+      try{
+        if(typeof PROJECTS!=='undefined'&&PROJECTS.length>0){
+          clearInterval(t);
+          if(o.colorFilter){colorFilter=o.colorFilter;}
+          if(o.cur!==undefined&&o.cur>=0&&o.cur<PROJECTS.length&&typeof previewProject==='function'){previewProject(o.cur);}else{render();}
+          if(typeof renderColorLegend==='function')renderColorLegend();
+          applyZoom(o.zoom||$('previewSlider').value);
+        }
+      }catch(e){}
+      if(tries>40)clearInterval(t);
+    },250);
+  }
+  window.addEventListener('load',function(){wire();setTimeout(restore,300);});
+})();
+</script>
+<style id="v2-img-css">
+.hdr-img{position:relative;width:78px;height:78px;flex:0 0 78px;border-radius:16px;border:1px dashed rgba(255,255,255,.28);background:rgba(255,255,255,.05);display:grid;place-items:center;cursor:pointer;overflow:hidden;color:rgba(255,255,255,.55);font-size:30px;user-select:none;transition:.15s}
+.hdr-img:hover{border-color:var(--a,#0f0);color:var(--a,#0f0)}
+.hdr-img.has{border-style:solid;border-color:var(--a,#0f0)}
+.hdr-img.drag{box-shadow:0 0 0 2px var(--a,#0f0)}
+.hdr-img img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.hdr-img button{position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;border:0;background:rgba(0,0,0,.72);color:#fff;font-size:11px;line-height:1;cursor:pointer;display:none;padding:0}
+.hdr-img.has button{display:block}
+@media(max-width:700px){.hdr-img{width:48px;height:48px;flex-basis:48px;font-size:20px;border-radius:12px}}
+</style>
+<script id="v2-img-js">
+(function(){
+  function idb(cb){try{var r=indexedDB.open('sec_hdr_img',1);r.onupgradeneeded=function(){r.result.createObjectStore('kv')};r.onsuccess=function(){cb(r.result)};r.onerror=function(){cb(null)};}catch(e){cb(null)}}
+  function iset(k,v){idb(function(db){if(!db){try{localStorage.setItem('hdr_'+k,v)}catch(e){alert('A kép túl nagy a mentéshez.')}return;}try{var tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(v,k);}catch(e){}});}
+  function idel(k){try{localStorage.removeItem('hdr_'+k)}catch(e){}idb(function(db){if(!db)return;try{db.transaction('kv','readwrite').objectStore('kv').delete(k)}catch(e){}});}
+  function iget(k,cb){idb(function(db){if(!db){cb(localStorage.getItem('hdr_'+k));return;}try{var q=db.transaction('kv','readonly').objectStore('kv').get(k);q.onsuccess=function(){cb(q.result||localStorage.getItem('hdr_'+k))};q.onerror=function(){cb(null)};}catch(e){cb(null)}});}
+  function make(key,title){
+    var bx=document.createElement('div');bx.className='hdr-img';bx.title=title;
+    bx.innerHTML='<span class="pl">＋</span><img alt="" style="display:none"><button title="Kép törlése">×</button>';
+    var inp=document.createElement('input');inp.type='file';inp.accept='image/*,.gif';inp.hidden=true;bx.appendChild(inp);
+    var im=bx.querySelector('img'),pl=bx.querySelector('.pl'),del=bx.querySelector('button');
+    function show(u){if(u){im.src=u;im.style.display='block';pl.style.display='none';bx.classList.add('has');}else{im.removeAttribute('src');im.style.display='none';pl.style.display='';bx.classList.remove('has');}}
+    function handle(f){
+      if(!f||f.type.indexOf('image/')!==0)return;
+      var r=new FileReader();r.onload=function(){var d=r.result;
+        if(f.type==='image/gif'){show(d);iset(key,d);return;}
+        var i=new Image();i.onload=function(){var m=512,sc=Math.min(1,m/Math.max(i.width,i.height));var c=document.createElement('canvas');c.width=Math.round(i.width*sc);c.height=Math.round(i.height*sc);c.getContext('2d').drawImage(i,0,0,c.width,c.height);var o=f.type==='image/png'?c.toDataURL('image/png'):c.toDataURL('image/jpeg',.9);show(o);iset(key,o);};
+        i.onerror=function(){show(d);iset(key,d)};i.src=d;};
+      r.readAsDataURL(f);
+    }
+    bx.addEventListener('click',function(e){if(e.target===del)return;inp.click();});
+    inp.addEventListener('change',function(){if(inp.files.length)handle(inp.files[0]);inp.value='';});
+    del.addEventListener('click',function(e){e.stopPropagation();show(null);idel(key);});
+    bx.addEventListener('dragover',function(e){e.preventDefault();bx.classList.add('drag')});
+    bx.addEventListener('dragleave',function(){bx.classList.remove('drag')});
+    bx.addEventListener('drop',function(e){e.preventDefault();bx.classList.remove('drag');if(e.dataTransfer.files.length)handle(e.dataTransfer.files[0]);});
+    iget(key,function(v){if(v)show(v)});
+    return bx;
+  }
+  function init(){
+    var row=document.querySelector('#top>.top-row');if(!row||document.getElementById('hdrImgL'))return;
+    var L=make('left','Bal kép / GIF (kattints vagy húzd ide)');L.id='hdrImgL';
+    var R=make('right','Jobb kép / GIF (kattints vagy húzd ide)');R.id='hdrImgR';
+    row.insertBefore(L,row.firstChild);row.appendChild(R);
+    if(window.fitGrid)setTimeout(fitGrid,50);
+  }
+  if(document.readyState==='complete')init();else window.addEventListener('load',init);
+})();
+</script>
 </body>
 </html>
